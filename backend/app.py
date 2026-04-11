@@ -4,7 +4,8 @@ from flask_cors import CORS
 import os
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'cashback.db')
@@ -30,7 +31,6 @@ def calcular():
     eh_vip = dados.get('eh_vip', False)
 
     valor_final = valor_bruto * (1 - (desconto_pct / 100))
-
     cashback = valor_final * 0.05
 
     if eh_vip:
@@ -39,7 +39,6 @@ def calcular():
     if valor_final > 500:
         cashback *= 2
 
-    # SALVAR NO BANCO DE DADOS
     nova_consulta = Consulta(
         ip_usuario=request.remote_addr,
         tipo_cliente="VIP" if eh_vip else "Normal",
@@ -56,7 +55,7 @@ def calcular():
 
 @app.route('/api/historico', methods=['GET'])
 def obter_historico():
-    ip = request.remote_addr
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     consultas = Consulta.query.filter_by(ip_usuario=ip).all()
     resultado = []
     for c in consultas:
@@ -68,4 +67,5 @@ def obter_historico():
     return jsonify(resultado)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)

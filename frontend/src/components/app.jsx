@@ -11,7 +11,7 @@ function App() {
 
   const carregarHistorico = async () => {
     try {
-      const response = await axios.get("http://127.0.0.1:5000/api/historico");
+      const response = await axios.get("https://cashback-calculator-nology.onrender.com/api/historico");
       setHistorico(response.data);
     } catch (error) {
       console.error("Erro ao carregar histórico", error);
@@ -29,7 +29,7 @@ function App() {
     }
 
     try {
-      const response = await axios.post("http://127.0.0.1:5000/api/calcular", {
+      const response = await axios.post("https://cashback-calculator-nology.onrender.com/api/calcular", {
         valor_bruto: valorCompra,
         desconto_percentual: cupom,
         eh_vip: isVip,

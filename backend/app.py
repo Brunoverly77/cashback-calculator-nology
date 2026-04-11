@@ -23,6 +23,13 @@ class Consulta(db.Model):
 with app.app_context():
     db.create_all()
 
+def get_client_ip():
+    """Função auxiliar para capturar o IP real do usuário, ignorando proxies do Render."""
+    ip_real = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip_real and ',' in ip_real:
+        ip_real = ip_real.split(',')[0].strip()
+    return ip_real
+
 @app.route('/api/calcular', methods=['POST'])
 def calcular():
     dados = request.json
@@ -39,8 +46,10 @@ def calcular():
     if valor_final > 500:
         cashback *= 2
 
+    ip_usuario = get_client_ip()
+    
     nova_consulta = Consulta(
-        ip_usuario=request.remote_addr,
+        ip_usuario=ip_usuario,
         tipo_cliente="VIP" if eh_vip else "Normal",
         valor_compra=valor_bruto,
         cashback_calculado=round(cashback, 2)
@@ -55,8 +64,9 @@ def calcular():
 
 @app.route('/api/historico', methods=['GET'])
 def obter_historico():
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    consultas = Consulta.query.filter_by(ip_usuario=ip).all()
+    ip_usuario = get_client_ip()
+    consultas = Consulta.query.filter_by(ip_usuario=ip_usuario).all()
+    
     resultado = []
     for c in consultas:
         resultado.append({

@@ -4,7 +4,6 @@ from flask_cors import CORS
 import os
 
 app = Flask(__name__)
-
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -24,7 +23,6 @@ with app.app_context():
     db.create_all()
 
 def get_client_ip():
-    """Função auxiliar para capturar o IP real do usuário, ignorando proxies do Render."""
     ip_real = request.headers.get('X-Forwarded-For', request.remote_addr)
     if ip_real and ',' in ip_real:
         ip_real = ip_real.split(',')[0].strip()
@@ -33,21 +31,26 @@ def get_client_ip():
 @app.route('/api/calcular', methods=['POST'])
 def calcular():
     dados = request.json
-    valor_bruto = float(dados.get('valor_bruto', 0))
-    desconto_pct = float(dados.get('desconto_percentual', 0))
-    eh_vip = dados.get('eh_vip', False)
+    try:
+        valor_bruto = float(dados.get('valor_bruto', 0))
+        desconto_pct = float(dados.get('desconto_percentual', 0))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "Valores inválidos"}), 400
 
+    if valor_bruto <= 0:
+        return jsonify({"erro": "O valor da compra deve ser positivo"}), 400
+    if desconto_pct < 0 or desconto_pct > 100:
+        return jsonify({"erro": "O cupom deve estar entre 0 e 100"}), 400
+
+    eh_vip = dados.get('eh_vip', False)
     valor_final = valor_bruto * (1 - (desconto_pct / 100))
     cashback = valor_final * 0.05
-
     if eh_vip:
         cashback += (cashback * 0.10)
-
     if valor_final > 500:
         cashback *= 2
 
     ip_usuario = get_client_ip()
-    
     nova_consulta = Consulta(
         ip_usuario=ip_usuario,
         tipo_cliente="VIP" if eh_vip else "Normal",
@@ -65,16 +68,22 @@ def calcular():
 @app.route('/api/historico', methods=['GET'])
 def obter_historico():
     ip_usuario = get_client_ip()
-    consultas = Consulta.query.filter_by(ip_usuario=ip_usuario).all()
-    
-    resultado = []
-    for c in consultas:
-        resultado.append({
-            "tipo": c.tipo_cliente,
-            "valor": c.valor_compra,
-            "cashback": c.cashback_calculado
-        })
-    return jsonify(resultado)
+    consultas = Consulta.query.filter_by(ip_usuario=ip_usuario)\
+                              .order_by(Consulta.id.desc()).all()
+    return jsonify([
+        {"id": c.id, "tipo": c.tipo_cliente, "valor": c.valor_compra, "cashback": c.cashback_calculado}
+        for c in consultas
+    ])
+
+@app.route('/api/historico/<int:item_id>', methods=['DELETE'])
+def deletar_item(item_id):
+    ip_usuario = get_client_ip()
+    consulta = Consulta.query.filter_by(id=item_id, ip_usuario=ip_usuario).first()
+    if not consulta:
+        return jsonify({"erro": "Item não encontrado ou sem permissão"}), 404
+    db.session.delete(consulta)
+    db.session.commit()
+    return jsonify({"mensagem": "Item apagado com sucesso"})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
